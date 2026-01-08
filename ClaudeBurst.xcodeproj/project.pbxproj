@@ -11,8 +11,8 @@
 		A10000012233445500B1 /* sounds in Resources */ = {isa = PBXBuildFile; fileRef = A10000012233445500B0 /* sounds */; };
 		A10000012233445500C1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000012233445500C0 /* Assets.xcassets */; };
 		A1000001223344550020 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550021 /* main.swift */; };
-		A10000012233445500D3 /* UsageWindowParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500D2 /* UsageWindowParserTests.swift */; };
-		A10000012233445500E3 /* UsageWindowParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500D0 /* UsageWindowParser.swift */; };
+		A10000012233445500D3 /* JSONLUsageParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500D2 /* JSONLUsageParserTests.swift */; };
+		A10000012233445500E3 /* JSONLUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500D0 /* JSONLUsageParser.swift */; };
 		A10000012233445500EB /* ClaudeBurstCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000012233445500E7 /* ClaudeBurstCore.framework */; };
 		A10000012233445500EC /* ClaudeBurstCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000012233445500E7 /* ClaudeBurstCore.framework */; };
 		A10000012233445500F0 /* ClaudeBurstCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000012233445500E7 /* ClaudeBurstCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -50,8 +50,8 @@
 		A10000012233445500B0 /* sounds */ = {isa = PBXFileReference; lastKnownFileType = folder; path = sounds; sourceTree = "<group>"; };
 		A10000012233445500C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000001223344550021 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		A10000012233445500D0 /* UsageWindowParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageWindowParser.swift; sourceTree = "<group>"; };
-		A10000012233445500D2 /* UsageWindowParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageWindowParserTests.swift; sourceTree = "<group>"; };
+		A10000012233445500D0 /* JSONLUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONLUsageParser.swift; sourceTree = "<group>"; };
+		A10000012233445500D2 /* JSONLUsageParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONLUsageParserTests.swift; sourceTree = "<group>"; };
 		A10000012233445500D4 /* ClaudeBurstTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeBurstTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000012233445500E7 /* ClaudeBurstCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = ClaudeBurstCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -98,7 +98,7 @@
 		A10000012233445500F2 /* ClaudeBurstCore */ = {
 			isa = PBXGroup;
 			children = (
-				A10000012233445500D0 /* UsageWindowParser.swift */,
+				A10000012233445500D0 /* JSONLUsageParser.swift */,
 			);
 			path = ClaudeBurstCore;
 			sourceTree = "<group>";
@@ -106,7 +106,7 @@
 		A10000012233445500DC /* ClaudeBurstTests */ = {
 			isa = PBXGroup;
 			children = (
-				A10000012233445500D2 /* UsageWindowParserTests.swift */,
+				A10000012233445500D2 /* JSONLUsageParserTests.swift */,
 			);
 			path = ClaudeBurstTests;
 			sourceTree = "<group>";
@@ -271,7 +271,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000012233445500D3 /* UsageWindowParserTests.swift in Sources */,
+				A10000012233445500D3 /* JSONLUsageParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -279,7 +279,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000012233445500E3 /* UsageWindowParser.swift in Sources */,
+				A10000012233445500E3 /* JSONLUsageParser.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -18,14 +18,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var usageDirectoryFileDescriptor: CInt?
     var usagePollTimer: Timer?
     var usageDirectoryPath: String?
-    var resolvedUsageFileURL: URL?
+    var resolvedProjectsDirectoryURL: URL?
 
     // User defaults keys
     let selectedSoundKey = "selectedSound"
     let hideFromDockKey = "hideFromDock"
     let supportedSoundExtensions = ["mp3", "wav", "m4a", "mp4"]
     let appSupportFolderName = "ClaudeBurst"
-    let usageFileName = "usage.json"
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Set default for hideFromDock to true (menubar-only by default)
@@ -107,20 +106,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func getCurrentSessionInfo() -> String {
         guard let window = currentSessionWindow else {
-            if resolveUsageFileURL() == nil {
-                return "Current: Usage file not found"
+            if resolveProjectsDirectoryURL() == nil {
+                return "Current: Claude data not found"
             }
-            return "Current: Unknown"
+            return "Current: No recent activity"
         }
         return "Current: \(formatSessionRange(start: window.start, end: window.end))"
     }
 
     func getNextSessionInfo() -> String {
         guard let window = currentSessionWindow else {
-            if resolveUsageFileURL() == nil {
-                return "Next session: Usage file not found"
+            if resolveProjectsDirectoryURL() == nil {
+                return "Next: Start Claude Code"
             }
-            return "Next session unknown"
+            return "Next: Start a session"
         }
 
         let now = Date()
@@ -220,88 +219,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func loadUsageWindow() -> UsageWindow? {
-        guard let fileURL = resolveUsageFileURL() else { return nil }
-
-        do {
-            let data = try Data(contentsOf: fileURL)
-            return UsageWindowParser.parseUsageWindow(from: data)
-        } catch {
-            print("Error reading usage.json: \(error)")
-            return nil
-        }
+        return JSONLUsageParser.loadCurrentWindow()
     }
 
-    func resolveUsageFileURL() -> URL? {
-        if let cachedURL = resolvedUsageFileURL, FileManager.default.fileExists(atPath: cachedURL.path) {
+    func resolveProjectsDirectoryURL() -> URL? {
+        if let cachedURL = resolvedProjectsDirectoryURL,
+           FileManager.default.fileExists(atPath: cachedURL.path) {
             return cachedURL
         }
 
-        for candidate in candidateUsageFileURLs() {
-            if FileManager.default.fileExists(atPath: candidate.path) {
-                resolvedUsageFileURL = candidate
-                return candidate
-            }
+        if let projectsDir = JSONLUsageParser.projectsDirectoryURL() {
+            resolvedProjectsDirectoryURL = projectsDir
+            return projectsDir
         }
 
-        if let discovered = discoverUsageFileURL() {
-            resolvedUsageFileURL = discovered
-            return discovered
-        }
-
-        resolvedUsageFileURL = nil
+        resolvedProjectsDirectoryURL = nil
         return nil
-    }
-
-    func candidateUsageFileURLs() -> [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return [
-            home.appendingPathComponent(".anthropic/claude/\(usageFileName)"),
-            home.appendingPathComponent(".anthropic/claude-code/\(usageFileName)"),
-            home.appendingPathComponent("Library/Application Support/Claude/\(usageFileName)"),
-            home.appendingPathComponent("Library/Application Support/Claude/claude/\(usageFileName)"),
-            home.appendingPathComponent("Library/Application Support/Claude/claude-code/\(usageFileName)")
-        ]
-    }
-
-    func discoverUsageFileURL() -> URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let root = home.appendingPathComponent("Library/Application Support/Claude", isDirectory: true)
-
-        let directCandidates = [
-            root.appendingPathComponent(usageFileName),
-            root.appendingPathComponent("claude").appendingPathComponent(usageFileName),
-            root.appendingPathComponent("claude-code").appendingPathComponent(usageFileName)
-        ]
-
-        for candidate in directCandidates where FileManager.default.fileExists(atPath: candidate.path) {
-            return candidate
-        }
-
-        let versionedRoot = root.appendingPathComponent("claude-code", isDirectory: true)
-        guard let contents = try? FileManager.default.contentsOfDirectory(at: versionedRoot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
-            return nil
-        }
-
-        for url in contents {
-            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            let candidate = url.appendingPathComponent(usageFileName)
-            if FileManager.default.fileExists(atPath: candidate.path) {
-                return candidate
-            }
-        }
-
-        return nil
-    }
-
-    func usageDirectoryURL() -> URL? {
-        guard let fileURL = resolveUsageFileURL() else { return nil }
-        return fileURL.deletingLastPathComponent()
     }
 
     func startUsageDirectoryMonitor() {
         guard usageDirectoryMonitor == nil else { return }
 
-        guard let directoryURL = usageDirectoryURL() else { return }
+        guard let directoryURL = resolveProjectsDirectoryURL() else { return }
         let descriptor = open(directoryURL.path, O_EVTONLY)
         guard descriptor != -1 else { return }
 
@@ -326,7 +265,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func refreshUsageDirectoryMonitor() {
-        guard let directoryURL = usageDirectoryURL() else {
+        guard let directoryURL = resolveProjectsDirectoryURL() else {
             stopUsageDirectoryMonitor()
             return
         }

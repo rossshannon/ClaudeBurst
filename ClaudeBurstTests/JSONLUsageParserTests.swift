@@ -1,0 +1,177 @@
+import XCTest
+import ClaudeBurstCore
+
+final class JSONLUsageParserTests: XCTestCase {
+
+    // MARK: - Parse Entries Tests
+
+    func testParseEntriesFromValidJSONL() {
+        let jsonl = """
+        {"timestamp": "2026-01-08T10:00:00.000Z", "type": "user", "message": {"usage": {"input_tokens": 100, "output_tokens": 0}}}
+        {"timestamp": "2026-01-08T10:00:05.000Z", "type": "assistant", "message": {"usage": {"input_tokens": 100, "output_tokens": 500}}}
+        """
+        let data = Data(jsonl.utf8)
+        let entries = JSONLUsageParser.parseEntries(from: data)
+
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries[0].type, "user")
+        XCTAssertEqual(entries[0].inputTokens, 100)
+        XCTAssertEqual(entries[0].outputTokens, 0)
+        XCTAssertEqual(entries[1].type, "assistant")
+        XCTAssertEqual(entries[1].outputTokens, 500)
+    }
+
+    func testParseEntriesSkipsInvalidLines() {
+        let jsonl = """
+        {"timestamp": "2026-01-08T10:00:00.000Z", "type": "user"}
+        not-json
+        {"timestamp": "invalid-date", "type": "user"}
+        {"timestamp": "2026-01-08T10:00:05.000Z", "type": "assistant"}
+        """
+        let data = Data(jsonl.utf8)
+        let entries = JSONLUsageParser.parseEntries(from: data)
+
+        // Should only get 2 valid entries (first and last have valid timestamps)
+        XCTAssertEqual(entries.count, 2)
+    }
+
+    func testParseEntriesHandlesEmptyData() {
+        let data = Data()
+        let entries = JSONLUsageParser.parseEntries(from: data)
+        XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testParseEntriesExtractsCacheTokens() {
+        let jsonl = """
+        {"timestamp": "2026-01-08T10:00:00.000Z", "type": "assistant", "message": {"usage": {"input_tokens": 100, "output_tokens": 50, "cache_creation_input_tokens": 5000, "cache_read_input_tokens": 200}}}
+        """
+        let data = Data(jsonl.utf8)
+        let entries = JSONLUsageParser.parseEntries(from: data)
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].cacheCreationTokens, 5000)
+        XCTAssertEqual(entries[0].cacheReadTokens, 200)
+        XCTAssertEqual(entries[0].totalTokens, 5350) // 100 + 50 + 5000 + 200
+    }
+
+    // MARK: - Calculate Window Tests
+
+    func testCalculateWindowReturnsNilForEmptyEntries() {
+        let window = JSONLUsageParser.calculateCurrentWindow(entries: [])
+        XCTAssertNil(window)
+    }
+
+    func testCalculateWindowWithRecentActivity() {
+        // Create an entry 1 hour ago
+        let oneHourAgo = Date().addingTimeInterval(-1 * 60 * 60)
+        let entries = [
+            JSONLUsageEntry(
+                timestamp: oneHourAgo,
+                type: "user",
+                inputTokens: 100,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0
+            )
+        ]
+
+        guard let window = JSONLUsageParser.calculateCurrentWindow(entries: entries) else {
+            return XCTFail("Expected calculateCurrentWindow to return a window")
+        }
+
+        // Session should be 5 hours
+        let windowDuration = window.end.timeIntervalSince(window.start)
+        XCTAssertEqual(windowDuration, JSONLUsageParser.sessionDuration, accuracy: 1.0)
+
+        // Current time should be within the window
+        let now = Date()
+        XCTAssertTrue(now < window.end, "Current time should be before window end")
+    }
+
+    func testCalculateWindowRoundsToHour() {
+        // Create entry at 10:45
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day, .hour], from: Date())
+        components.hour = 10
+        components.minute = 45
+        components.second = 0
+
+        guard let timestamp = calendar.date(from: components) else {
+            return XCTFail("Could not create test date")
+        }
+
+        let entries = [
+            JSONLUsageEntry(
+                timestamp: timestamp,
+                type: "user",
+                inputTokens: 100,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0
+            )
+        ]
+
+        guard let window = JSONLUsageParser.calculateCurrentWindow(entries: entries) else {
+            return XCTFail("Expected calculateCurrentWindow to return a window")
+        }
+
+        // 10:45 should round to 11:00
+        let startComponents = calendar.dateComponents([.minute], from: window.start)
+        XCTAssertEqual(startComponents.minute, 0, "Session start should be rounded to the hour")
+    }
+
+    func testCalculateWindowDetectsGap() {
+        // Create two entries with a 6-hour gap (more than 5-hour session duration)
+        let sixHoursAgo = Date().addingTimeInterval(-6 * 60 * 60)
+        let oneHourAgo = Date().addingTimeInterval(-1 * 60 * 60)
+
+        let entries = [
+            JSONLUsageEntry(
+                timestamp: sixHoursAgo,
+                type: "user",
+                inputTokens: 100,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0
+            ),
+            JSONLUsageEntry(
+                timestamp: oneHourAgo,
+                type: "user",
+                inputTokens: 100,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0
+            )
+        ]
+
+        guard let window = JSONLUsageParser.calculateCurrentWindow(entries: entries) else {
+            return XCTFail("Expected calculateCurrentWindow to return a window")
+        }
+
+        // The session should start from the more recent entry, not the old one
+        // Since there's a 6-hour gap, the second entry starts a new session
+        let now = Date()
+        XCTAssertTrue(now < window.end, "Current time should be within the active window")
+    }
+
+    // MARK: - Session Duration Tests
+
+    func testSessionDurationIsFiveHours() {
+        let expectedDuration: TimeInterval = 5 * 60 * 60
+        XCTAssertEqual(JSONLUsageParser.sessionDuration, expectedDuration)
+    }
+
+    // MARK: - Usage Window Struct Tests
+
+    func testUsageWindowEquality() {
+        let start = Date()
+        let end = start.addingTimeInterval(5 * 60 * 60)
+
+        let window1 = UsageWindow(start: start, end: end)
+        let window2 = UsageWindow(start: start, end: end)
+        let window3 = UsageWindow(start: start.addingTimeInterval(1), end: end)
+
+        XCTAssertEqual(window1, window2)
+        XCTAssertNotEqual(window1, window3)
+    }
+}
