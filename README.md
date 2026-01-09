@@ -1,4 +1,10 @@
+<div align="center">
+
+![ClaudeBurst Header](https://github.com/rossshannon/ClaudeBurst/raw/main/icons/claudeburst-header.png)
+
 # ClaudeBurst
+
+</div>
 
 A macOS menubar app that notifies you when your Claude Code session allowance refreshes.
 
