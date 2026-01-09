@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A1000001223344550001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550000 /* AppDelegate.swift */; };
 		A10000012233445500B1 /* sounds in Resources */ = {isa = PBXBuildFile; fileRef = A10000012233445500B0 /* sounds */; };
+		A10000012233445500F4 /* bonmots.txt in Resources */ = {isa = PBXBuildFile; fileRef = A10000012233445500F3 /* bonmots.txt */; };
 		A10000012233445500C1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000012233445500C0 /* Assets.xcassets */; };
 		A1000001223344550020 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550021 /* main.swift */; };
 		A10000012233445500D3 /* JSONLUsageParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500D2 /* JSONLUsageParserTests.swift */; };
@@ -44,6 +45,7 @@
 
 /* Begin PBXFileReference section */
 		A1000001223344550000 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A10000012233445500F3 /* bonmots.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = bonmots.txt; sourceTree = "<group>"; };
 		A1000001223344550006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1000001223344550007 /* ClaudeBurst.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClaudeBurst.entitlements; sourceTree = "<group>"; };
 		A1000001223344550008 /* ClaudeBurst.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeBurst.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -88,11 +90,20 @@
 			children = (
 				A1000001223344550021 /* main.swift */,
 				A1000001223344550000 /* AppDelegate.swift */,
+				A10000012233445500F5 /* Resources */,
 				A10000012233445500C0 /* Assets.xcassets */,
 				A1000001223344550006 /* Info.plist */,
 				A1000001223344550007 /* ClaudeBurst.entitlements */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		A10000012233445500F5 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A10000012233445500F3 /* bonmots.txt */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		A10000012233445500F2 /* ClaudeBurstCore */ = {
@@ -238,6 +249,7 @@
 			files = (
 				A10000012233445500B1 /* sounds in Resources */,
 				A10000012233445500C1 /* Assets.xcassets in Resources */,
+				A10000012233445500F4 /* bonmots.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

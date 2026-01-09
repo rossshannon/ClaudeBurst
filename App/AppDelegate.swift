@@ -21,6 +21,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var resolvedProjectsDirectoryURL: URL?
     var hasCompletedInitialLoad = false
 
+    // Bon mots for notifications
+    var bonMots: [String] = []
+    var lastBonMotIndex: Int?
+
     // User defaults keys
     let selectedSoundKey = "selectedSound"
     let hideFromDockKey = "hideFromDock"
@@ -30,6 +34,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Set default for hideFromDock to true (menubar-only by default)
         UserDefaults.standard.register(defaults: [hideFromDockKey: true])
+
+        // Load bon mots for notifications
+        loadBonMots()
 
         // Request notification permissions
         requestNotificationPermission()
@@ -356,6 +363,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let content = UNMutableNotificationContent()
         content.title = "A new Claude Code session has begun!"
         content.subtitle = subtitle
+        if let bonMot = getRandomBonMot() {
+            content.body = bonMot
+        }
         content.sound = nil // We play our own sound
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
@@ -364,6 +374,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 print("Notification error: \(error)")
             }
         }
+    }
+
+    func loadBonMots() {
+        guard let url = Bundle.main.url(forResource: "bonmots", withExtension: "txt"),
+              let contents = try? String(contentsOf: url, encoding: .utf8) else {
+            return
+        }
+
+        bonMots = contents
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    func getRandomBonMot() -> String? {
+        guard !bonMots.isEmpty else { return nil }
+
+        var index = Int.random(in: 0..<bonMots.count)
+
+        // Avoid repeating the same bon mot if we have more than one
+        if bonMots.count > 1, let lastIndex = lastBonMotIndex, index == lastIndex {
+            index = (index + 1) % bonMots.count
+        }
+
+        lastBonMotIndex = index
+        return bonMots[index]
     }
 
     @objc func testNotification() {
