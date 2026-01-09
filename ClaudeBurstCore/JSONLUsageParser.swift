@@ -50,8 +50,8 @@ public enum JSONLUsageParser {
     /// Claude Code uses 5-hour rolling windows for usage limits
     public static let sessionDuration: TimeInterval = 5 * 60 * 60
 
-    /// How far back to look for activity (8 days, matching the reference implementation)
-    public static let lookbackDuration: TimeInterval = 8 * 24 * 60 * 60
+    /// How far back to look for activity (24 hours - enough to find any active session)
+    public static let lookbackDuration: TimeInterval = 24 * 60 * 60
 
     /// Parse all entries from a JSONL file's data
     public static func parseEntries(from data: Data) -> [JSONLUsageEntry] {
@@ -238,7 +238,7 @@ public enum JSONLUsageParser {
         return nil
     }
 
-    /// Convenience method to load the current window from the default projects directory
+    /// Convenience method to load the current window from the default projects directory (synchronous)
     public static func loadCurrentWindow() -> UsageWindow? {
         guard let projectsDir = projectsDirectoryURL() else { return nil }
 
@@ -254,5 +254,15 @@ public enum JSONLUsageParser {
         }
 
         return calculateCurrentWindow(entries: allEntries)
+    }
+
+    /// Async version that performs file I/O off the main thread
+    public static func loadCurrentWindowAsync() async -> UsageWindow? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = loadCurrentWindow()
+                continuation.resume(returning: result)
+            }
+        }
     }
 }

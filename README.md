@@ -83,7 +83,7 @@ It parses timestamps from these files to calculate 5-hour session windows. The s
 - **Window duration**: 5 hours (matching Claude Code's rolling limit)
 - **Window start**: Rounded to the nearest hour in UTC (e.g., 10:35 → 11:00, 10:25 → 10:00)
 - **New window triggers**: When the previous window expires, or after a 5+ hour gap in activity
-- **Lookback period**: 8 days of logs are scanned for recent activity
+- **Lookback period**: 24 hours of logs are scanned for recent activity
 
 The app watches the projects directory for changes and updates the display when new activity is logged.
 

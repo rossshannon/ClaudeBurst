@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var usagePollTimer: Timer?
     var usageDirectoryPath: String?
     var resolvedProjectsDirectoryURL: URL?
+    var hasCompletedInitialLoad = false
 
     // User defaults keys
     let selectedSoundKey = "selectedSound"
@@ -33,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Request notification permissions
         requestNotificationPermission()
 
-        // Setup menubar
+        // Setup menubar immediately (shows "Loading…" state)
         setupMenuBar()
 
         // Start session timer
@@ -45,7 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Ensure external sounds folder exists for user-managed sounds
         prepareSoundDirectory()
 
-        // Load session window from Claude usage and start watchers
+        // Load session data async and start watchers
         startUsageMonitoring()
     }
 
@@ -105,6 +106,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func getCurrentSessionInfo() -> String {
+        if !hasCompletedInitialLoad {
+            return "Current: Loading…"
+        }
         guard let window = currentSessionWindow else {
             if resolveProjectsDirectoryURL() == nil {
                 return "Current: Claude data not found"
@@ -115,6 +119,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func getNextSessionInfo() -> String {
+        if !hasCompletedInitialLoad {
+            return "Next: Loading…"
+        }
         guard let window = currentSessionWindow else {
             if resolveProjectsDirectoryURL() == nil {
                 return "Next: Start Claude Code"
@@ -197,15 +204,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func readUsageAndUpdate(triggerIfRolledOver: Bool) {
-        guard let window = loadUsageWindow() else {
-            currentSessionWindow = nil
-            return
+        Task {
+            await readUsageAndUpdateAsync(triggerIfRolledOver: triggerIfRolledOver)
         }
+    }
+
+    @MainActor
+    private func readUsageAndUpdateAsync(triggerIfRolledOver: Bool) async {
+        let window = await JSONLUsageParser.loadCurrentWindowAsync()
 
         let previousEnd = currentSessionWindow?.end
         currentSessionWindow = window
+        hasCompletedInitialLoad = true
 
-        guard let previousEnd else { return }
+        guard let window = window, let previousEnd = previousEnd else { return }
 
         if window.end > previousEnd {
             let shouldNotify = triggerIfRolledOver || Date() >= previousEnd
@@ -216,10 +228,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
 
         refreshUsageDirectoryMonitor()
-    }
-
-    func loadUsageWindow() -> UsageWindow? {
-        return JSONLUsageParser.loadCurrentWindow()
     }
 
     func resolveProjectsDirectoryURL() -> URL? {
