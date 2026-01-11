@@ -97,6 +97,17 @@ The app watches the projects directory for changes and updates the display when 
 
 The app runs without App Sandbox because it needs to read Claude Code's log files at `~/.claude/projects/`, which is outside the sandbox container.
 
+## Complementary Projects
+
+Other tools for monitoring Claude Code usage:
+
+- **[ccusage](https://github.com/ryoppippi/ccusage)** — CLI tool for analyzing Claude Code usage from local JSONL files. Shows daily, monthly, and session-based usage with cost tracking.
+- **[Claude-Code-Usage-Monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor)** — Real-time terminal monitor with Rich UI, ML-based predictions, and support for Pro/Max plans.
+- **[ccusage-monitor](https://github.com/zhiyue/ccusage-monitor)** — Real-time terminal monitor with visual progress bars and token depletion predictions.
+- **[ccusage-monitor (macOS)](https://github.com/joachimBrindeau/ccusage-monitor)** — Minimal macOS menu bar app for tracking API usage and billing cycles.
+- **[ccusage-py](https://github.com/m6k/ccusage-py)** — Python implementation of ccusage for analyzing token usage and costs.
+- **[ccseva](https://github.com/Iamshankhadeep/ccseva)** — macOS menu bar app built with Electron and React for real-time usage tracking.
+
 ## License
 
 MIT License
