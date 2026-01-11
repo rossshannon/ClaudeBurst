@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+echo "Running Swift tests before commit..."
+
+# Run tests using xcodebuild
+xcodebuild test \
+  -project ClaudeBurst.xcodeproj \
+  -scheme ClaudeBurst \
+  -destination 'platform=macOS' \
+  -quiet \
+  2>&1 | tail -20
+
+if [ ${PIPESTATUS[0]} -eq 0 ]; then
+  echo "✓ All tests passed"
+else
+  echo "✗ Tests failed - commit aborted"
+  exit 1
+fi
