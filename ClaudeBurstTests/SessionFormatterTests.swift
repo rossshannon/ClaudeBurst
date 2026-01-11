@@ -144,7 +144,7 @@ final class SessionFormatterTests: XCTestCase {
 
         let result = SessionFormatter.nextSessionDescription(window: window, now: now, locale: testLocale)
 
-        XCTAssertEqual(result, "Next session at 1pm")
+        XCTAssertEqual(result, "Next session starts at 1pm")
     }
 
     func testNextSessionDescriptionAt60Minutes() {
@@ -174,6 +174,44 @@ final class SessionFormatterTests: XCTestCase {
 
         let result = SessionFormatter.nextSessionDescription(window: window, now: now, locale: testLocale)
 
-        XCTAssertEqual(result, "Next session at 1pm")
+        XCTAssertEqual(result, "Next session starts at 1pm")
+    }
+
+    // MARK: - estimatedNextWindow Tests
+
+    func testEstimatedNextWindowTruncatesToHour() {
+        // 1:45pm should give "1pm–6pm" (truncates to 1pm, adds 5 hours)
+        let time = date(hour: 13, minute: 45)
+
+        let result = SessionFormatter.estimatedNextWindow(from: time, locale: testLocale)
+
+        XCTAssertEqual(result, "1pm–6pm")
+    }
+
+    func testEstimatedNextWindowOnTheHour() {
+        // 1:00pm should give "1pm–6pm"
+        let time = date(hour: 13, minute: 0)
+
+        let result = SessionFormatter.estimatedNextWindow(from: time, locale: testLocale)
+
+        XCTAssertEqual(result, "1pm–6pm")
+    }
+
+    func testEstimatedNextWindowAtMidnight() {
+        // 12:30am should give "12am–5am"
+        let time = date(hour: 0, minute: 30)
+
+        let result = SessionFormatter.estimatedNextWindow(from: time, locale: testLocale)
+
+        XCTAssertEqual(result, "12am–5am")
+    }
+
+    func testEstimatedNextWindowCrossingMidnight() {
+        // 11pm should give "11pm–4am" (crosses midnight)
+        let time = date(hour: 23, minute: 0)
+
+        let result = SessionFormatter.estimatedNextWindow(from: time, locale: testLocale)
+
+        XCTAssertEqual(result, "11pm–4am")
     }
 }

@@ -46,7 +46,7 @@ public struct SessionFormatter {
             if minutesRemaining <= 60 {
                 return "Next session in \(minutesRemaining)m"
             }
-            return "Next session at \(formatTime(window.end, locale: locale))"
+            return "Next session starts at \(formatTime(window.end, locale: locale))"
         }
 
         return "Next session soon"
