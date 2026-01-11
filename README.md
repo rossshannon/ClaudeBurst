@@ -10,10 +10,10 @@ A macOS menubar app that notifies you when your Claude Code session allowance re
 
 ## Features
 
-- Menubar-only app (doesn't appear in Dock by default)
+- Menubar-only app (doesn’t appear in Dock by default)
 - Shows current session and next session time in the menu
 - Plays a sound effect when the Claude Code allowance window rolls over
-- Shows a local notification: "A new Claude Code session has begun!" with time range subtitle
+- Shows a local notification: “A new Claude Code session has begun!” with time range subtitle
 - Settings window to choose notification sound from dropdown
 - Preview button to test selected sound
 - Option to show/hide from Dock (instant toggle)
@@ -23,7 +23,7 @@ A macOS menubar app that notifies you when your Claude Code session allowance re
 ### Using Xcode
 
 1. Open `ClaudeBurst.xcodeproj` in Xcode
-2. Select "ClaudeBurst" scheme
+2. Select “ClaudeBurst” scheme
 3. Build (Cmd+B) or Run (Cmd+R)
 4. The built app will be in `~/Library/Developer/Xcode/DerivedData/ClaudeBurst-*/Build/Products/Release/ClaudeBurst.app`
 
@@ -44,8 +44,8 @@ xcodebuild -project ClaudeBurst.xcodeproj -scheme ClaudeBurst -configuration Rel
 ## Usage
 
 - Click the menubar icon to see:
-  - **Current session** - e.g., "Current: 5pm–10pm"
-  - **Next session** - e.g., "Next session at 10pm"
+  - **Current session** - e.g., “Current: 5pm–10pm”
+  - **Next session** - e.g., “Next session at 10pm”
   - **Settings...** - Configure notification sound and dock visibility
   - **Test Notification** - Preview the notification and sound
   - **Quit** - Exit the app
@@ -59,7 +59,7 @@ This app combines two sources at runtime:
 
 Notes:
 - Invalid files in Application Support are ignored (e.g., empty files or unsupported audio).
-- Use the "Open Sounds Folder" button in Settings to jump to the runtime folder.
+- Use the “Open Sounds Folder” button in Settings to jump to the runtime folder.
 - The app watches the Application Support folder and refreshes the Settings list automatically.
 - Sounds in `./sounds` are bundled at build time; move files there and rebuild to update the baked-in list.
 
@@ -76,7 +76,7 @@ The script reads `./icons/claudeburst-appicon.png` relative to the project root.
 
 ## Session Timing Source
 
-ClaudeBurst reads Claude Code's JSONL log files from:
+ClaudeBurst reads Claude Code’s JSONL log files from:
 
 ```
 ~/.claude/projects/**/*.jsonl
@@ -86,7 +86,7 @@ It parses timestamps from these files to calculate 5-hour session windows. The s
 
 ### How Session Windows Work
 
-- **Window duration**: 5 hours (matching Claude Code's rolling limit)
+- **Window duration**: 5 hours (matching Claude Code’s rolling limit)
 - **Window start**: Rounded to the nearest hour in UTC (e.g., 10:35 → 11:00, 10:25 → 10:00)
 - **New window triggers**: When the previous window expires, or after a 5+ hour gap in activity
 - **Lookback period**: 24 hours of logs are scanned for recent activity
@@ -95,7 +95,7 @@ The app watches the projects directory for changes and updates the display when 
 
 ## Security Note
 
-The app runs without App Sandbox because it needs to read Claude Code's log files at `~/.claude/projects/`, which is outside the sandbox container.
+The app runs without App Sandbox because it needs to read Claude Code’s log files at `~/.claude/projects/`, which is outside the sandbox container.
 
 ## License
 

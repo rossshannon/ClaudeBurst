@@ -122,45 +122,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             return "Current: No recent activity"
         }
-        return "Current: \(formatSessionRange(start: window.start, end: window.end))"
+        return SessionFormatter.currentSessionDescription(window: window)
     }
 
     func getNextSessionInfo() -> String {
         if !hasCompletedInitialLoad {
             return "Next: Loading…"
         }
-        guard let window = currentSessionWindow else {
+        guard currentSessionWindow != nil else {
             if resolveProjectsDirectoryURL() == nil {
                 return "Next: Start Claude Code"
             }
             return "Next: Start a session"
         }
 
-        let now = Date()
-        if now < window.end {
-            let minutesRemaining = Int((window.end.timeIntervalSince(now) / 60).rounded(.up))
-            if minutesRemaining <= 60 {
-                return "Next session in \(minutesRemaining)m"
-            }
-            return "Next session at \(formatTime(window.end))"
-        }
-
-        return "Next session soon"
-    }
-
-    func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.amSymbol = "am"
-        formatter.pmSymbol = "pm"
-
-        let hasMinutes = Calendar.current.component(.minute, from: date) != 0
-        formatter.dateFormat = hasMinutes ? "h:mma" : "ha"
-        return formatter.string(from: date).lowercased()
-    }
-
-    func formatSessionRange(start: Date, end: Date) -> String {
-        return "\(formatTime(start))–\(formatTime(end))"
+        return SessionFormatter.nextSessionDescription(window: currentSessionWindow)
     }
 
     func loadMenuBarIcon() -> NSImage? {
@@ -230,7 +206,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let shouldNotify = triggerIfRolledOver || Date() >= previousEnd
             if shouldNotify && lastNotifiedPeriodEnd != previousEnd {
                 lastNotifiedPeriodEnd = previousEnd
-                triggerSessionNotification(subtitle: formatSessionRange(start: window.start, end: window.end))
+                triggerSessionNotification(subtitle: SessionFormatter.formatSessionRange(start: window.start, end: window.end))
             }
         }
 
@@ -404,7 +380,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc func testNotification() {
         if let window = currentSessionWindow {
-            triggerSessionNotification(subtitle: formatSessionRange(start: window.start, end: window.end))
+            triggerSessionNotification(subtitle: SessionFormatter.formatSessionRange(start: window.start, end: window.end))
         } else {
             triggerSessionNotification(subtitle: "Session")
         }
