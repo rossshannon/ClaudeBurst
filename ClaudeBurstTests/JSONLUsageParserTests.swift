@@ -88,15 +88,17 @@ final class JSONLUsageParserTests: XCTestCase {
         XCTAssertTrue(now < window.end, "Current time should be before window end")
     }
 
-    func testCalculateWindowRoundsToHour() {
+    func testCalculateWindowTruncatesToHour() {
         // Create entry at 10:45
-        let calendar = Calendar.current
-        var components = calendar.dateComponents([.year, .month, .day, .hour], from: Date())
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+
+        var components = utcCalendar.dateComponents([.year, .month, .day, .hour], from: Date())
         components.hour = 10
         components.minute = 45
         components.second = 0
 
-        guard let timestamp = calendar.date(from: components) else {
+        guard let timestamp = utcCalendar.date(from: components) else {
             return XCTFail("Could not create test date")
         }
 
@@ -115,9 +117,70 @@ final class JSONLUsageParserTests: XCTestCase {
             return XCTFail("Expected calculateCurrentWindow to return a window")
         }
 
-        // 10:45 should round to 11:00
-        let startComponents = calendar.dateComponents([.minute], from: window.start)
-        XCTAssertEqual(startComponents.minute, 0, "Session start should be rounded to the hour")
+        // 10:45 should truncate to 10:00 (floor, not round) - matches Claude Code behavior
+        let startComponents = utcCalendar.dateComponents([.hour, .minute], from: window.start)
+        XCTAssertEqual(startComponents.hour, 10, "Session start hour should be 10 (truncated)")
+        XCTAssertEqual(startComponents.minute, 0, "Session start should be truncated to the hour")
+    }
+
+    func testCalculateWindowTruncatesAtHourBoundaries() {
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+
+        // Test 10:01 -> 10:00 (should NOT be 9:00)
+        var components = utcCalendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = 10
+        components.minute = 1
+        components.second = 0
+
+        guard let earlyTimestamp = utcCalendar.date(from: components) else {
+            return XCTFail("Could not create early test date")
+        }
+
+        let earlyEntries = [
+            JSONLUsageEntry(
+                timestamp: earlyTimestamp,
+                type: "user",
+                inputTokens: 100,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0
+            )
+        ]
+
+        guard let earlyWindow = JSONLUsageParser.calculateCurrentWindow(entries: earlyEntries) else {
+            return XCTFail("Expected calculateCurrentWindow to return a window for early timestamp")
+        }
+
+        let earlyStartComponents = utcCalendar.dateComponents([.hour, .minute], from: earlyWindow.start)
+        XCTAssertEqual(earlyStartComponents.hour, 10, "10:01 should truncate to 10:00, not 9:00")
+        XCTAssertEqual(earlyStartComponents.minute, 0)
+
+        // Test 10:59 -> 10:00 (should NOT be 11:00)
+        components.minute = 59
+
+        guard let lateTimestamp = utcCalendar.date(from: components) else {
+            return XCTFail("Could not create late test date")
+        }
+
+        let lateEntries = [
+            JSONLUsageEntry(
+                timestamp: lateTimestamp,
+                type: "user",
+                inputTokens: 100,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0
+            )
+        ]
+
+        guard let lateWindow = JSONLUsageParser.calculateCurrentWindow(entries: lateEntries) else {
+            return XCTFail("Expected calculateCurrentWindow to return a window for late timestamp")
+        }
+
+        let lateStartComponents = utcCalendar.dateComponents([.hour, .minute], from: lateWindow.start)
+        XCTAssertEqual(lateStartComponents.hour, 10, "10:59 should truncate to 10:00, not 11:00")
+        XCTAssertEqual(lateStartComponents.minute, 0)
     }
 
     func testCalculateWindowDetectsGap() {

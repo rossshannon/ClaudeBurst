@@ -153,8 +153,8 @@ public enum JSONLUsageParser {
                     blocks.append(UsageWindow(start: start, end: end))
                 }
 
-                // Start a new block - round to nearest hour in UTC
-                let blockStart = roundToHourUTC(entry.timestamp)
+                // Start a new block - truncate to hour in UTC (matches Claude Code)
+                let blockStart = truncateToHourUTC(entry.timestamp)
                 currentBlockStart = blockStart
                 currentBlockEnd = blockStart.addingTimeInterval(sessionDuration)
             }
@@ -178,24 +178,15 @@ public enum JSONLUsageParser {
         return blocks.last
     }
 
-    /// Round a date to the nearest hour in UTC (handles 23:30+ correctly via calendar arithmetic)
-    private static func roundToHourUTC(_ date: Date) -> Date {
+    /// Truncate a date to the start of the hour in UTC.
+    /// Claude Code uses floor/truncate semantics for session windows (verified via /usage command).
+    /// For example: 8:56am activity starts a session at 8:00am, not 9:00am.
+    private static func truncateToHourUTC(_ date: Date) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
 
-        let minute = calendar.component(.minute, from: date)
-
-        // Truncate to the start of the current hour
-        guard let truncated = calendar.date(bySetting: .minute, value: 0, of: date),
-              let noSeconds = calendar.date(bySetting: .second, value: 0, of: truncated) else {
-            return date
-        }
-
-        // Round up if >= 30 minutes
-        if minute >= 30 {
-            return calendar.date(byAdding: .hour, value: 1, to: noSeconds) ?? date
-        }
-        return noSeconds
+        let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+        return calendar.date(from: components) ?? date
     }
 
     /// Find all JSONL files in the projects directory modified since a given date
