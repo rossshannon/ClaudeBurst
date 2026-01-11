@@ -18,28 +18,37 @@ A macOS menubar app that notifies you when your Claude Code session allowance re
 - Preview button to test selected sound
 - Option to show/hide from Dock (instant toggle)
 
-## Building
+## Building & Installation
+
+### Using Build Script (Recommended)
+
+```bash
+cd ClaudeBurst
+
+# Build only
+./build.sh
+
+# Build and install to /Applications
+./build.sh --install
+```
+
+The `--install` flag will clean build, kill any running instance, copy to `/Applications`, and launch the app.
 
 ### Using Xcode
 
 1. Open `ClaudeBurst.xcodeproj` in Xcode
-2. Select “ClaudeBurst” scheme
+2. Select "ClaudeBurst" scheme
 3. Build (Cmd+B) or Run (Cmd+R)
-4. The built app will be in `~/Library/Developer/Xcode/DerivedData/ClaudeBurst-*/Build/Products/Release/ClaudeBurst.app`
+4. The built app will be in `build/Build/Products/Release/ClaudeBurst.app`
 
-### Using Command Line
+### Manual Installation
 
-```bash
-cd ClaudeBurst
-xcodebuild -project ClaudeBurst.xcodeproj -scheme ClaudeBurst -configuration Release build
-```
-
-## Installation
-
-1. Build the app
+1. Build the app using either method above
 2. Copy `ClaudeBurst.app` to `/Applications`
 3. Launch the app - it will appear in your menubar with the ClaudeBurst icon
 4. Grant notification permissions when prompted
+
+**Note:** Always use a clean build (`./build.sh --install`) when deploying to ensure all changes are included.
 
 ## Usage
 
@@ -86,8 +95,8 @@ It parses timestamps from these files to calculate 5-hour session windows. The s
 
 ### How Session Windows Work
 
-- **Window duration**: 5 hours (matching Claude Code’s rolling limit)
-- **Window start**: Rounded to the nearest hour in UTC (e.g., 10:35 → 11:00, 10:25 → 10:00)
+- **Window duration**: 5 hours (matching Claude Code's rolling limit)
+- **Window start**: Truncated to the hour in UTC (e.g., 10:56 → 10:00, matching Claude Code's `/usage` behavior)
 - **New window triggers**: When the previous window expires, or after a 5+ hour gap in activity
 - **Lookback period**: 24 hours of logs are scanned for recent activity
 
