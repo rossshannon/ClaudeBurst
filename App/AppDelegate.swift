@@ -168,11 +168,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func startSessionTimer() {
-        // Check every minute
-        sessionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        // Check every 20 seconds for timely session boundary notifications
+        sessionTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             self?.checkSessionRollover()
         }
-        sessionTimer?.tolerance = 10
+        sessionTimer?.tolerance = 10  // Max 30s delay from boundary
     }
 
     func checkSessionRollover() {
@@ -181,8 +181,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
 
-        if Date() >= window.end {
-            readUsageAndUpdate(triggerIfRolledOver: true)
+        let now = Date()
+        if now >= window.end {
+            // Notify at session boundary if we haven't already
+            if lastNotifiedPeriodEnd != window.end {
+                lastNotifiedPeriodEnd = window.end
+                let estimatedWindow = SessionFormatter.estimatedNextWindow(from: now)
+                triggerSessionNotification(subtitle: estimatedWindow)
+            }
+            // Also check for new activity
+            readUsageAndUpdate(triggerIfRolledOver: false)
         }
     }
 

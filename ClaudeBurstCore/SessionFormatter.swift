@@ -60,4 +60,24 @@ public struct SessionFormatter {
     public static func currentSessionDescription(window: UsageWindow, locale: Locale = .current) -> String {
         return "Current: \(formatSessionRange(start: window.start, end: window.end, locale: locale))"
     }
+
+    /// Estimates the next session window based on a given time
+    /// Used for notifications when session boundary is reached but no new activity yet
+    /// - Parameters:
+    ///   - date: The time to calculate from (typically now)
+    ///   - locale: The locale to use for formatting (defaults to current)
+    /// - Returns: A formatted range like "1pm–6pm"
+    public static func estimatedNextWindow(from date: Date, locale: Locale = .current) -> String {
+        // Truncate to start of hour in UTC (matches Claude Code's behavior)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+
+        let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+        guard let start = calendar.date(from: components) else {
+            return "New session"
+        }
+
+        let end = start.addingTimeInterval(5 * 60 * 60)
+        return formatSessionRange(start: start, end: end, locale: locale)
+    }
 }
