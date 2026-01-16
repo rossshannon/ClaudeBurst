@@ -1,6 +1,6 @@
 <div align="center">
 
-![ClaudeBurst Header](https://github.com/rossshannon/ClaudeBurst/raw/main/icons/claudeburst-header.png)
+![ClaudeBurst Header](images/claude-rays.png)
 
 # ClaudeBurst
 
@@ -11,12 +11,11 @@ A macOS menubar app that notifies you when your Claude Code session allowance re
 ## Features
 
 - Menubar-only app (doesn’t appear in Dock by default)
-- Shows current session and next session time in the menu
-- Plays a sound effect when the Claude Code allowance window rolls over
+- Plays an inspirational sound effect when the Claude Code allowance window rolls over
 - Shows a local notification: “A new Claude Code session has begun!” with 5-hour time range subtitle
 - Settings window to choose notification sound from among a set of nostalgic jingles
+- Shows current session and next session time in the menu
 - Preview button to test selected sound
-- Option to show/hide from Dock (instant toggle)
 
 ## Building & Installation
 
@@ -68,7 +67,9 @@ The `--install` flag will clean build, kill any old running instance, copy to `/
 
 ## Session Timing Source
 
-ClaudeBurst reads Claude Code’s JSONL log files from:
+![Claude Code Usage](images/claude-code-usage.png)
+
+ClaudeBurst reads Claude Code's JSONL log files from:
 
 ```
 ~/.claude/projects/**/*.jsonl
@@ -99,6 +100,15 @@ Notes:
 - Use the “Open Sounds Folder” button in Settings to jump to the runtime folder.
 - The app watches the Application Support folder and refreshes the Settings list automatically.
 - Sounds in `./sounds` are bundled at build time; move files there and rebuild to update the baked-in list.
+
+## Complementary Projects
+
+Other tools for monitoring Claude Code usage:
+
+- **[Claude-Code-Usage-Monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor)** by [@Maciek-roboblog](https://github.com/Maciek-roboblog) — Real-time terminal monitor with Rich UI, ML-based predictions, and support for Pro/Max plans.
+- **[ccusage](https://github.com/ryoppippi/ccusage)** by [@ryoppippi](https://github.com/ryoppippi) — CLI tool for analyzing Claude Code usage from local JSONL files. Shows daily, monthly, and session-based usage with cost tracking.
+- **[ccusage-monitor (macOS)](https://github.com/joachimBrindeau/ccusage-monitor)** by [@joachimBrindeau](https://github.com/joachimBrindeau) — Minimal macOS menu bar app for tracking API usage and billing cycles.
+- **[ccseva](https://github.com/Iamshankhadeep/ccseva)** by [@Iamshankhadeep](https://github.com/Iamshankhadeep) — macOS menu bar app built with Electron and React for real-time usage tracking.
 
 ## License
 
