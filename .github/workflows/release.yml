@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build Release
+        run: |
+          xcodebuild build \
+            -project ClaudeBurst.xcodeproj \
+            -scheme ClaudeBurst \
+            -configuration Release \
+            -derivedDataPath build
+
+      - name: Create Zip
+        run: |
+          cd build/Build/Products/Release
+          zip -r -y ClaudeBurst.app.zip ClaudeBurst.app
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/Build/Products/Release/ClaudeBurst.app.zip
+          generate_release_notes: true

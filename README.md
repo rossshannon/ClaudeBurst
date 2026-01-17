@@ -8,6 +8,21 @@
 
 A macOS menubar app that notifies you when your Claude Code session allowance refreshes.
 
+## Download
+
+### Pre-built Release
+
+1. Download `ClaudeBurst.app.zip` from the [latest release](../../releases/latest)
+2. Unzip and move `ClaudeBurst.app` to `/Applications`
+3. **First launch** — macOS will block the unsigned app. To allow it:
+   - Right-click the app → **Open** → Click **Open** in the dialog
+   - Or run in Terminal: `xattr -cr /Applications/ClaudeBurst.app`
+4. Grant notification permissions when prompted
+
+### Build from Source
+
+See [Building & Installation](#building--installation) below if you prefer to build locally.
+
 ## Features
 
 - Menubar-only app (doesn’t appear in Dock by default)
