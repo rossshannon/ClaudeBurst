@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var hasCompletedInitialLoad = false
 
     // Performance optimization: debouncing and concurrency control
+    // Note: These are accessed from main queue contexts (event handlers and @MainActor async functions)
     private var debounceWorkItem: DispatchWorkItem?
     private var isUpdateInProgress = false
 
@@ -306,6 +307,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func stopUsageDirectoryMonitor() {
+        debounceWorkItem?.cancel()
+        debounceWorkItem = nil
         usageDirectoryMonitor?.cancel()
         usageDirectoryMonitor = nil
         usageDirectoryFileDescriptor = nil

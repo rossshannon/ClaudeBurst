@@ -225,9 +225,10 @@ final class JSONLUsageParserTests: XCTestCase {
     }
 
     func testLookbackDurationIsOptimizedForSessionWindow() {
-        // Lookback should be 6 hours (slightly more than 5-hour session window)
-        // This was optimized from 24h to reduce file scanning overhead
-        let expectedDuration: TimeInterval = 6 * 60 * 60
+        // Lookback should be 8 hours (60% buffer over 5-hour session window)
+        // Optimized from 24h to reduce file scanning overhead
+        // 8h provides safety margin for DST transitions and edge cases
+        let expectedDuration: TimeInterval = 8 * 60 * 60
         XCTAssertEqual(JSONLUsageParser.lookbackDuration, expectedDuration)
         XCTAssertGreaterThan(JSONLUsageParser.lookbackDuration, JSONLUsageParser.sessionDuration,
                             "Lookback duration should be greater than session duration to catch session boundaries")

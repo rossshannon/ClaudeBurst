@@ -50,9 +50,10 @@ public enum JSONLUsageParser {
     /// Claude Code uses 5-hour rolling windows for usage limits
     public static let sessionDuration: TimeInterval = 5 * 60 * 60
 
-    /// How far back to look for activity (6 hours - optimized for 5-hour session windows)
-    /// Reduced from 24h to minimize file scanning overhead while ensuring session detection
-    public static let lookbackDuration: TimeInterval = 6 * 60 * 60
+    /// How far back to look for activity (8 hours - provides 60% buffer over 5-hour sessions)
+    /// Reduced from 24h to minimize file scanning overhead while maintaining safety margin
+    /// for edge cases like DST transitions and timezone changes
+    public static let lookbackDuration: TimeInterval = 8 * 60 * 60
 
     /// Cached date formatters to avoid repeated allocation (performance optimization)
     private static let dateFormatter: ISO8601DateFormatter = {
