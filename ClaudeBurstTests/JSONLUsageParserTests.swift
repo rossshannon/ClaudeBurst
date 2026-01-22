@@ -224,6 +224,41 @@ final class JSONLUsageParserTests: XCTestCase {
         XCTAssertEqual(JSONLUsageParser.sessionDuration, expectedDuration)
     }
 
+    func testLookbackDurationIsOptimizedForSessionWindow() {
+        // Lookback should be 6 hours (slightly more than 5-hour session window)
+        // This was optimized from 24h to reduce file scanning overhead
+        let expectedDuration: TimeInterval = 6 * 60 * 60
+        XCTAssertEqual(JSONLUsageParser.lookbackDuration, expectedDuration)
+        XCTAssertGreaterThan(JSONLUsageParser.lookbackDuration, JSONLUsageParser.sessionDuration,
+                            "Lookback duration should be greater than session duration to catch session boundaries")
+    }
+
+    // MARK: - Performance Optimization Tests
+
+    func testParseEntriesHandlesLargeFiles() {
+        // Test that stream-based parsing can handle many lines without memory issues
+        var jsonlLines: [String] = []
+        let lineCount = 10000 // Simulate a large log file
+
+        for i in 0..<lineCount {
+            let timestamp = Date().addingTimeInterval(-Double(i) * 60) // One entry per minute
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let timestampString = isoFormatter.string(from: timestamp)
+            jsonlLines.append("{\"timestamp\": \"\(timestampString)\", \"type\": \"assistant\", \"message\": {\"usage\": {\"input_tokens\": 100, \"output_tokens\": 50}}}")
+        }
+
+        let jsonl = jsonlLines.joined(separator: "\n")
+        let data = Data(jsonl.utf8)
+
+        // Should efficiently parse all entries using enumerateLines
+        let entries = JSONLUsageParser.parseEntries(from: data)
+
+        XCTAssertEqual(entries.count, lineCount, "Should parse all \(lineCount) entries")
+        XCTAssertEqual(entries[0].inputTokens, 100)
+        XCTAssertEqual(entries[0].outputTokens, 50)
+    }
+
     // MARK: - Usage Window Struct Tests
 
     func testUsageWindowEquality() {
