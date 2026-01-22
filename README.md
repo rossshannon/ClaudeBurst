@@ -8,6 +8,19 @@
 
 A macOS menubar app that notifies you when your Claude Code session allowance refreshes.
 
+<table align="center">
+  <tr>
+    <td align="center"><img src="images/claudeburst-menubar.png" alt="ClaudeBurst Menubar" width="300"></td>
+    <td align="center"><img src="images/claudeburst-settings.png" alt="ClaudeBurst Settings" width="300"></td>
+  </tr>
+</table>
+
+<div align="center">
+
+https://github.com/user-attachments/assets/fbf9a4ef-a430-4f5f-9217-e10d154fb03f
+
+</div>
+
 ## Download
 
 ### Pre-built Release
