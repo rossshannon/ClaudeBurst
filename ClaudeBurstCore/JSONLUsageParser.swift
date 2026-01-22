@@ -50,35 +50,44 @@ public enum JSONLUsageParser {
     /// Claude Code uses 5-hour rolling windows for usage limits
     public static let sessionDuration: TimeInterval = 5 * 60 * 60
 
-    /// How far back to look for activity (24 hours - enough to find any active session)
-    public static let lookbackDuration: TimeInterval = 24 * 60 * 60
+    /// How far back to look for activity (6 hours - optimized for 5-hour session windows)
+    /// Reduced from 24h to minimize file scanning overhead while ensuring session detection
+    public static let lookbackDuration: TimeInterval = 6 * 60 * 60
+
+    /// Cached date formatters to avoid repeated allocation (performance optimization)
+    private static let dateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let fallbackDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 
     /// Parse all entries from a JSONL file's data
+    /// Uses line-by-line streaming to minimize memory allocations
     public static func parseEntries(from data: Data) -> [JSONLUsageEntry] {
         guard let content = String(data: data, encoding: .utf8) else { return [] }
 
-        let lines = content.components(separatedBy: .newlines)
         var entries: [JSONLUsageEntry] = []
 
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let fallbackFormatter = ISO8601DateFormatter()
-        fallbackFormatter.formatOptions = [.withInternetDateTime]
-
-        for line in lines {
+        // Stream processing: enumerate lines without creating intermediate array
+        content.enumerateLines { line, _ in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
+            guard !trimmed.isEmpty else { return }
 
             guard let lineData = trimmed.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
-                continue
+                return
             }
 
             guard let timestampString = json["timestamp"] as? String,
                   let timestamp = dateFormatter.date(from: timestampString)
-                    ?? fallbackFormatter.date(from: timestampString) else {
-                continue
+                    ?? fallbackDateFormatter.date(from: timestampString) else {
+                return
             }
 
             let type = json["type"] as? String ?? ""
