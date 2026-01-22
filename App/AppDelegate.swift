@@ -21,6 +21,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var resolvedProjectsDirectoryURL: URL?
     var hasCompletedInitialLoad = false
 
+    // Performance optimization: debouncing and concurrency control
+    private var debounceWorkItem: DispatchWorkItem?
+    private var isUpdateInProgress = false
+
     // Bon mots for notifications
     var bonMots: [String] = []
     var lastBonMotIndex: Int?
@@ -202,6 +206,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @MainActor
     private func readUsageAndUpdateAsync(triggerIfRolledOver: Bool) async {
+        // Prevent concurrent scans - skip if update already in progress
+        guard !isUpdateInProgress else { return }
+
+        isUpdateInProgress = true
+        defer { isUpdateInProgress = false }
+
         let window = await JSONLUsageParser.loadCurrentWindowAsync()
 
         let previousEnd = currentSessionWindow?.end
@@ -250,7 +260,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         )
 
         source.setEventHandler { [weak self] in
-            self?.readUsageAndUpdate(triggerIfRolledOver: true)
+            // Debounce rapid file system events to prevent CPU storms
+            // Cancel any pending update
+            self?.debounceWorkItem?.cancel()
+
+            // Schedule new update with 500ms delay
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.readUsageAndUpdate(triggerIfRolledOver: true)
+            }
+            self?.debounceWorkItem = workItem
+
+            // Execute after 500ms delay to coalesce rapid events
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
 
         source.setCancelHandler {
