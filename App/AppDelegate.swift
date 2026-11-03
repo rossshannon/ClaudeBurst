@@ -171,7 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         guard usageMonitor == nil else { return }
 
         guard let directoryURL = resolveProjectsDirectoryURL() else {
-            hasCompletedInitialLoad = true
+            updateUsageWindow(nil)
             return
         }
 
@@ -211,11 +211,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     /// Ask for a refresh; the result arrives in updateUsageWindow(_:)
     func readUsageAndUpdate() {
-        guard let monitor = usageMonitor else {
-            startUsageMonitorIfPossible()
+        let rootPath = resolveProjectsDirectoryURL().map { UsageLogScanner.canonicalPath($0.path) }
+        if let monitor = usageMonitor, monitor.rootPath == rootPath {
+            monitor.refresh()
             return
         }
-        monitor.refresh()
+
+        // The projects directory appeared, disappeared, or now resolves to another folder
+        usageMonitor?.stop()
+        usageMonitor = nil
+        startUsageMonitorIfPossible()
     }
 
     func updateUsageWindow(_ window: UsageWindow?) {

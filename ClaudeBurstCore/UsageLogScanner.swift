@@ -7,6 +7,10 @@ import Foundation
 /// dropped from their metadata alone, without being opened. So after the first full scan, a
 /// refresh costs one `stat` per tracked file plus the parsing of new bytes.
 ///
+/// Claude Code only appends to its logs. A file that is truncated or replaced (new inode) is
+/// parsed again from the start, and so is one rewritten in place whose first or last parsed
+/// bytes changed. A rewrite that keeps both is not detected.
+///
 /// Not thread-safe: use each instance from one serial queue.
 public final class UsageLogScanner {
     /// How much work the scanner has done, for tests and diagnostics
@@ -26,8 +30,8 @@ public final class UsageLogScanner {
     /// Timestamps of all entries in ascending order; nil after any file's entries change
     private var sortedTimestamps: [Date]?
 
-    /// How many bytes before the parse position are compared on each read, to detect a file
-    /// that was rewritten in place to at least its previous length
+    /// How many bytes at the start of a file, and just before the parse position, are compared
+    /// on each read to detect a file that was rewritten in place
     static let fingerprintLength = 64
 
     public init(
@@ -77,9 +81,9 @@ public final class UsageLogScanner {
             update(path: path, cutoff: cutoff)
         }
 
-        // Sorting every entry is the costliest step left once nothing new was read, so do it
-        // only when some file's entries changed
-        let timestamps = sortedTimestamps ?? entries.map(\.timestamp).sorted()
+        // Rebuilt only when some file's entries changed. Each file's timestamps are mostly in
+        // order already, so the sort merges a few long runs rather than sorting from scratch.
+        let timestamps = sortedTimestamps ?? trackedFiles.values.flatMap { $0.timestamps + $0.tailTimestamps }.sorted()
         sortedTimestamps = timestamps
         return JSONLUsageParser.calculateCurrentWindow(sortedTimestamps: timestamps, now: now)
     }
@@ -93,16 +97,22 @@ public final class UsageLogScanner {
 
     private struct TrackedFile {
         let identity: FileIdentity
+        /// Modification time when the file was last read
+        var modificationDate: Date?
         /// Bytes parsed so far; always 0 or just after a newline
         var parsedOffset: UInt64 = 0
         /// File size when the file was last read
         var readSize: UInt64 = 0
+        /// The first bytes of the file, up to `fingerprintLength`, from the parsed region
+        var headFingerprint = Data()
         /// The last bytes before `parsedOffset`
-        var fingerprint = Data()
-        /// Entries from complete, newline-terminated lines
+        var tailFingerprint = Data()
+        /// Entries from complete, newline-terminated lines, and their timestamps
         var entries: [JSONLUsageEntry] = []
+        var timestamps: [Date] = []
         /// Entries from a last line with no newline yet; parsed again on every read
         var tailEntries: [JSONLUsageEntry] = []
+        var tailTimestamps: [Date] = []
 
         init(identity: FileIdentity) {
             self.identity = identity
@@ -131,11 +141,12 @@ public final class UsageLogScanner {
         if file.identity != identity || size < file.parsedOffset {
             // Replaced by another file, or truncated: start again from the beginning
             file = TrackedFile(identity: identity)
-        } else if size == file.readSize, trackedFiles[path] != nil {
+        } else if size == file.readSize, modified == file.modificationDate {
             return
         }
 
-        read(path: path, into: &file, upTo: size)
+        guard read(path: path, into: &file, upTo: size) else { return }
+        file.modificationDate = modified
         trackedFiles[path] = file
         sortedTimestamps = nil
     }
@@ -146,24 +157,24 @@ public final class UsageLogScanner {
         }
     }
 
-    /// Read the bytes from `parsedOffset` to `size` and parse every complete line among them
-    private func read(path: String, into file: inout TrackedFile, upTo size: UInt64) {
+    /// Read the bytes from `parsedOffset` to `size` and parse every complete line among them.
+    /// Returns false if the file could not be opened, leaving `file` unchanged.
+    private func read(path: String, into file: inout TrackedFile, upTo size: UInt64) -> Bool {
         guard let handle = FileHandle(forReadingAtPath: path) else {
-            return
+            return false
         }
         defer { try? handle.close() }
         statistics.filesOpened += 1
 
         do {
-            if !file.fingerprint.isEmpty {
-                try handle.seek(toOffset: file.parsedOffset - UInt64(file.fingerprint.count))
-                let current = try handle.read(upToCount: file.fingerprint.count) ?? Data()
-                statistics.bytesRead += current.count
-                if current != file.fingerprint {
-                    // Rewritten in place: the parsed bytes are gone, so start again
-                    file = TrackedFile(identity: file.identity)
-                }
+            if try !fingerprintsMatch(file, in: handle) {
+                // Rewritten in place: the parsed bytes are gone, so start again
+                file = TrackedFile(identity: file.identity)
             }
+
+            // Cleared first, so a read that fails partway cannot leave a stale provisional entry
+            file.tailEntries = []
+            file.tailTimestamps = []
 
             try handle.seek(toOffset: file.parsedOffset)
             var position = file.parsedOffset
@@ -181,26 +192,48 @@ public final class UsageLogScanner {
                       let lastNewline = unparsed.lastIndex(of: JSONLUsageParser.newline) else { continue }
                 let lineEnd = unparsed.index(after: lastNewline)
                 let complete = unparsed[..<lineEnd]
-                file.entries.append(contentsOf: JSONLUsageParser.parseEntries(from: complete))
+                let parsed = JSONLUsageParser.parseEntries(from: complete)
+                file.entries.append(contentsOf: parsed)
+                file.timestamps.append(contentsOf: parsed.map(\.timestamp))
                 file.parsedOffset += UInt64(complete.count)
-                file.fingerprint = Self.fingerprint(previous: file.fingerprint, appending: complete)
+                Self.extendFingerprints(of: &file, with: complete)
                 unparsed = Data(unparsed[lineEnd...])
             }
 
             // A last line without a newline is either still being written (invalid JSON, so no
             // entry) or complete; either way it is parsed again, not consumed, on the next read
             file.tailEntries = JSONLUsageParser.parseEntries(from: unparsed)
+            file.tailTimestamps = file.tailEntries.map(\.timestamp)
             file.readSize = position
         } catch {
             // Unreadable right now: keep what was parsed and try again on the next refresh
         }
+        return true
     }
 
-    private static func fingerprint(previous: Data, appending complete: Data) -> Data {
-        if complete.count >= fingerprintLength {
-            return Data(complete.suffix(fingerprintLength))
+    /// Whether the first bytes of the file, and the bytes just before `parsedOffset`, are still
+    /// the ones that were parsed
+    private func fingerprintsMatch(_ file: TrackedFile, in handle: FileHandle) throws -> Bool {
+        guard file.parsedOffset > 0 else { return true }
+
+        try handle.seek(toOffset: 0)
+        let head = try handle.read(upToCount: file.headFingerprint.count) ?? Data()
+        try handle.seek(toOffset: file.parsedOffset - UInt64(file.tailFingerprint.count))
+        let tail = try handle.read(upToCount: file.tailFingerprint.count) ?? Data()
+        statistics.bytesRead += head.count + tail.count
+
+        return head == file.headFingerprint && tail == file.tailFingerprint
+    }
+
+    private static func extendFingerprints(of file: inout TrackedFile, with complete: Data) {
+        if file.headFingerprint.count < fingerprintLength {
+            file.headFingerprint.append(complete.prefix(fingerprintLength - file.headFingerprint.count))
         }
-        return Data((previous + complete).suffix(fingerprintLength))
+        if complete.count >= fingerprintLength {
+            file.tailFingerprint = Data(complete.suffix(fingerprintLength))
+        } else {
+            file.tailFingerprint = Data((file.tailFingerprint + complete).suffix(fingerprintLength))
+        }
     }
 
     // MARK: - Paths
@@ -213,7 +246,7 @@ public final class UsageLogScanner {
     }
 
     /// Resolve symlinks the way FSEvents does, so /var/... and /private/var/... name the same file
-    static func canonicalPath(_ path: String) -> String {
+    public static func canonicalPath(_ path: String) -> String {
         guard let resolved = realpath(path, nil) else { return path }
         defer { free(resolved) }
         return String(cString: resolved)

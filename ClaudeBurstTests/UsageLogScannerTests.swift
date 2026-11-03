@@ -25,10 +25,15 @@ final class UsageLogScannerTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func line(minutesAgo: Double, outputTokens: Int = 1) -> String {
+    /// One log line of a fixed length for one-digit token counts; the timestamp sits in the first
+    /// 64 bytes and the token counts in the last 64
+    private func line(minutesAgo: Double, inputTokens: Int = 1, outputTokens: Int = 1) -> String {
         let timestamp = isoFormatter.string(from: Date().addingTimeInterval(-minutesAgo * 60))
-        return "{\"timestamp\": \"\(timestamp)\", \"type\": \"assistant\", \"message\": {\"usage\": {\"input_tokens\": 1, \"output_tokens\": \(outputTokens)}}}\n"
+        return "{\"timestamp\": \"\(timestamp)\", \"type\": \"assistant\", \"message\": {\"usage\": {\"input_tokens\": \(inputTokens), \"output_tokens\": \(outputTokens)}}}\n"
     }
+
+    /// Bytes a refresh reads to check that the parsed part of a file is unchanged
+    private let verificationBytes = 2 * UsageLogScanner.fingerprintLength
 
     private func logURL(_ name: String = "session.jsonl") -> URL {
         root.appendingPathComponent("project").appendingPathComponent(name)
@@ -81,16 +86,20 @@ final class UsageLogScannerTests: XCTestCase {
         // /var is a symlink to /private/var; FSEvents always reports the /private form
         let aliasPath = root.path.replacingOccurrences(of: "/private/var/", with: "/var/")
         try XCTSkipIf(aliasPath == root.path, "temporary directory is not under /private/var")
-        try write(line(minutesAgo: 10), to: logURL())
 
         let scanner = UsageLogScanner(rootDirectory: URL(fileURLWithPath: aliasPath, isDirectory: true))
         scanner.refresh(fullScan: true)
-        try append(line(minutesAgo: 1), to: logURL())
-        scanner.refresh(changedPaths: [logURL().path])
-
         XCTAssertEqual(scanner.rootPath, root.path)
+
+        // Created after the full scan, so only the event path can find it
+        try write(line(minutesAgo: 1), to: logURL())
+        scanner.refresh(changedPaths: [logURL().path])
         XCTAssertEqual(scanner.trackedFileCount, 1)
-        XCTAssertEqual(scanner.entries.count, 2)
+
+        // A later full scan names the same file the same way, so it is not tracked twice
+        scanner.refresh(fullScan: true)
+        XCTAssertEqual(scanner.trackedFileCount, 1)
+        XCTAssertEqual(scanner.entries.count, 1)
     }
 
     // MARK: - Incremental reads
@@ -121,9 +130,8 @@ final class UsageLogScannerTests: XCTestCase {
         let before = scanner.statistics
         scanner.refresh()
 
-        // The appended line, plus the short fingerprint read that checks the file was not rewritten
-        XCTAssertEqual(scanner.statistics.bytesRead - before.bytesRead,
-                       appended.utf8.count + UsageLogScanner.fingerprintLength)
+        // The appended line, plus the short fingerprint reads that check the file was not rewritten
+        XCTAssertEqual(scanner.statistics.bytesRead - before.bytesRead, appended.utf8.count + verificationBytes)
         XCTAssertEqual(scanner.statistics.filesOpened - before.filesOpened, 1)
         XCTAssertEqual(scanner.entries.count, 201)
     }
@@ -159,14 +167,14 @@ final class UsageLogScannerTests: XCTestCase {
     func testCompleteLastLineWithoutNewlineIsCountedOnce() throws {
         // parseEntries counts a final line with no newline, so the scanner must too, without
         // counting it a second time once its newline arrives
-        try write(String(line(minutesAgo: 5).dropLast()), to: logURL())
+        try write(String(line(minutesAgo: 5, outputTokens: 1).dropLast()), to: logURL())
         let scanner = UsageLogScanner(rootDirectory: root)
         scanner.refresh(fullScan: true)
-        XCTAssertEqual(scanner.entries.count, 1)
+        XCTAssertEqual(scanner.entries.map(\.outputTokens), [1])
 
-        try append("\n" + line(minutesAgo: 1), to: logURL())
+        try append("\n" + line(minutesAgo: 1, outputTokens: 2), to: logURL())
         scanner.refresh()
-        XCTAssertEqual(scanner.entries.count, 2)
+        XCTAssertEqual(scanner.entries.map(\.outputTokens), [1, 2])
     }
 
     func testLinesSplitAcrossReadChunksAreParsed() throws {
@@ -226,23 +234,28 @@ final class UsageLogScannerTests: XCTestCase {
     }
 
     func testReplacedFileIsParsedAgain() throws {
-        try write(line(minutesAgo: 5), to: logURL())
+        let first = line(minutesAgo: 5)
+        let second = line(minutesAgo: 4)
+        try write(first + second, to: logURL())
         let scanner = UsageLogScanner(rootDirectory: root)
         scanner.refresh(fullScan: true)
         let inodeBefore = try inode(of: logURL())
 
-        // An atomic write renames a new file over the old one, so the inode changes
-        let replacement = line(minutesAgo: 4, outputTokens: 2) + line(minutesAgo: 3, outputTokens: 2)
-        try Data(replacement.utf8).write(to: logURL(), options: .atomic)
+        // An atomic write renames a new file over the old one, so the inode changes. The
+        // replacement keeps the first and last parsed bytes and changes only the middle of the
+        // first line, so only the inode shows that the file is a different one.
+        let changedFirst = first.replacingOccurrences(of: "\"input_tokens\": 1", with: "\"input_tokens\": 5")
+        XCTAssertNotEqual(changedFirst, first)
+        try Data((changedFirst + second + line(minutesAgo: 1)).utf8).write(to: logURL(), options: .atomic)
         XCTAssertNotEqual(try inode(of: logURL()), inodeBefore)
         scanner.refresh()
 
-        XCTAssertEqual(scanner.entries.map(\.outputTokens), [2, 2])
+        XCTAssertEqual(scanner.entries.map(\.inputTokens), [5, 1, 1])
     }
 
     func testFileRewrittenInPlaceIsParsedAgain() throws {
         // Same inode, and longer than before by the time the scanner looks again, so neither the
-        // inode nor the size shows the change; the fingerprint does
+        // inode nor the size shows the change; the fingerprints do
         try write(line(minutesAgo: 5) + line(minutesAgo: 4), to: logURL())
         let scanner = UsageLogScanner(rootDirectory: root)
         scanner.refresh(fullScan: true)
@@ -255,6 +268,39 @@ final class UsageLogScannerTests: XCTestCase {
         scanner.refresh()
 
         XCTAssertEqual(scanner.entries.map(\.outputTokens), [9, 9, 9])
+    }
+
+    func testSameLengthRewriteInPlaceIsParsedAgain() throws {
+        // Same inode and same size: only the modification time shows that the file changed
+        let original = line(minutesAgo: 5) + line(minutesAgo: 4)
+        try write(original, to: logURL())
+        let scanner = UsageLogScanner(rootDirectory: root)
+        scanner.refresh(fullScan: true)
+        let inodeBefore = try inode(of: logURL())
+
+        let rewritten = original.replacingOccurrences(of: "\"output_tokens\": 1", with: "\"output_tokens\": 9")
+        XCTAssertEqual(rewritten.utf8.count, original.utf8.count)
+        try rewriteInPlace(rewritten, at: logURL())
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(2)], ofItemAtPath: logURL().path)
+        XCTAssertEqual(try inode(of: logURL()), inodeBefore)
+        scanner.refresh()
+
+        XCTAssertEqual(scanner.entries.map(\.outputTokens), [9, 9])
+    }
+
+    func testRewriteThatKeepsTheLastParsedBytesIsParsedAgain() throws {
+        // New timestamps, same token counts: the bytes just before the old parse position are
+        // unchanged, so only the start of the file shows the rewrite
+        try write(line(minutesAgo: 50) + line(minutesAgo: 40), to: logURL())
+        let scanner = UsageLogScanner(rootDirectory: root)
+        scanner.refresh(fullScan: true)
+
+        let rewritten = line(minutesAgo: 30) + line(minutesAgo: 20) + line(minutesAgo: 10)
+        try rewriteInPlace(rewritten, at: logURL())
+        scanner.refresh()
+
+        let expected = JSONLUsageParser.parseEntries(from: Data(rewritten.utf8)).map(\.timestamp)
+        XCTAssertEqual(scanner.entries.map(\.timestamp), expected)
     }
 
     // MARK: - The lookback window
@@ -325,12 +371,16 @@ final class UsageLogScannerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: elsewhere) }
         try write(line(minutesAgo: 1), to: logURL("notes.txt"))
         try write(line(minutesAgo: 1), to: logURL(".hidden.jsonl"))
+        let inHiddenFolder = root.appendingPathComponent("project/.cache/session.jsonl")
+        try FileManager.default.createDirectory(at: inHiddenFolder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try write(line(minutesAgo: 1), to: inHiddenFolder)
 
         let scanner = UsageLogScanner(rootDirectory: root)
         scanner.refresh(changedPaths: [
             UsageLogScanner.canonicalPath(elsewhere.path),
             logURL("notes.txt").path,
-            logURL(".hidden.jsonl").path
+            logURL(".hidden.jsonl").path,
+            inHiddenFolder.path
         ])
 
         XCTAssertEqual(scanner.trackedFileCount, 0)

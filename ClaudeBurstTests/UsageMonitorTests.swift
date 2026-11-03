@@ -1,3 +1,4 @@
+import CoreServices
 import XCTest
 @testable import ClaudeBurstCore
 
@@ -128,5 +129,53 @@ final class UsageMonitorTests: XCTestCase {
         try Data(line.utf8).write(to: log)
 
         wait(for: [windowFromEvent], timeout: 10)
+        XCTAssertEqual(monitor.statisticsForTesting().fullScans, 1, "the event alone must find the file, without walking the tree")
+    }
+
+    // MARK: - Event batches
+
+    private func flags(_ values: Int...) -> FSEventStreamEventFlags {
+        FSEventStreamEventFlags(values.reduce(0, |))
+    }
+
+    func testModifiedLogBecomesAChangedPath() {
+        let request = UsageMonitor.refreshRequest(
+            forEventPaths: ["/root/project/a.jsonl"],
+            flags: [flags(kFSEventStreamEventFlagItemIsFile, kFSEventStreamEventFlagItemModified)]
+        )
+        XCTAssertEqual(request, RefreshRequest(changedPaths: ["/root/project/a.jsonl"], fullScan: false))
+    }
+
+    func testRenamedLogFileIsAChangedPathNotAFullScan() {
+        let request = UsageMonitor.refreshRequest(
+            forEventPaths: ["/root/project/a.jsonl"],
+            flags: [flags(kFSEventStreamEventFlagItemIsFile, kFSEventStreamEventFlagItemRenamed)]
+        )
+        XCTAssertEqual(request, RefreshRequest(changedPaths: ["/root/project/a.jsonl"], fullScan: false))
+    }
+
+    func testEventsForOtherFilesAskForNothing() {
+        let request = UsageMonitor.refreshRequest(
+            forEventPaths: ["/root/project/tool-output.txt", "/root/project/new-folder"],
+            flags: [
+                flags(kFSEventStreamEventFlagItemIsFile, kFSEventStreamEventFlagItemModified),
+                flags(kFSEventStreamEventFlagItemIsDir, kFSEventStreamEventFlagItemCreated)
+            ]
+        )
+        XCTAssertNil(request)
+    }
+
+    func testLostEventsAndMovedFoldersAskForAFullScan() {
+        let rescanFlags = [
+            flags(kFSEventStreamEventFlagMustScanSubDirs),
+            flags(kFSEventStreamEventFlagUserDropped),
+            flags(kFSEventStreamEventFlagKernelDropped),
+            flags(kFSEventStreamEventFlagRootChanged),
+            flags(kFSEventStreamEventFlagItemIsDir, kFSEventStreamEventFlagItemRenamed)
+        ]
+        for flag in rescanFlags {
+            let request = UsageMonitor.refreshRequest(forEventPaths: ["/root/project"], flags: [flag])
+            XCTAssertEqual(request?.fullScan, true, "flags \(flag)")
+        }
     }
 }
