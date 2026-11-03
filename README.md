@@ -112,9 +112,9 @@ The app runs without App Sandbox because it needs to read Claude Code’s log fi
 - **Window duration**: 5 hours (matching Claude Code's rolling limit)
 - **Window start**: Truncated to the current hour in UTC (e.g., 10:56 → 10:00, matching Claude Code's `/usage` behavior)
 - **New window triggers**: When the previous window expires, or after a 5+ hour gap in activity
-- **Lookback period**: 24 hours of logs are scanned for recent activity
+- **Lookback period**: logs modified in the last 8 hours are scanned for recent activity
 
-The app watches the projects directory for changes and updates the display when new activity is logged.
+The app scans the projects directory once at launch, then follows file-system events for changes at any depth. Each log is read incrementally: a refresh reads only the bytes appended since the last one, so the cost does not grow with the size of your log history.
 
 ## Adding Custom Sounds
 

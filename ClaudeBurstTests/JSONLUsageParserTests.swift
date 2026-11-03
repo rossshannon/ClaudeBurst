@@ -1,5 +1,5 @@
 import XCTest
-import ClaudeBurstCore
+@testable import ClaudeBurstCore
 
 final class JSONLUsageParserTests: XCTestCase {
 
@@ -39,6 +39,38 @@ final class JSONLUsageParserTests: XCTestCase {
         let data = Data()
         let entries = JSONLUsageParser.parseEntries(from: data)
         XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testParseEntriesKeepsLinesContainingUnicodeLineSeparators() {
+        // JSON allows U+2028 unescaped inside strings; splitting on it would break the line in two
+        let jsonl = "{\"timestamp\": \"2026-01-08T10:00:00.000Z\", \"type\": \"user\", \"text\": \"a\u{2028}b\"}\n"
+        let entries = JSONLUsageParser.parseEntries(from: Data(jsonl.utf8))
+        XCTAssertEqual(entries.count, 1)
+    }
+
+    func testParseEntriesSkipsOnlyTheLineWithInvalidUTF8() {
+        var data = Data("{\"timestamp\": \"2026-01-08T10:00:00.000Z\", \"type\": \"user\"}\n".utf8)
+        data.append(contentsOf: [0x7B, 0xFF, 0xFE, 0x7D, 0x0A])
+        data.append(Data("{\"timestamp\": \"2026-01-08T10:00:05.000Z\", \"type\": \"assistant\"}\n".utf8))
+
+        let entries = JSONLUsageParser.parseEntries(from: data)
+        XCTAssertEqual(entries.map(\.type), ["user", "assistant"])
+    }
+
+    func testParseEntriesAcceptsCRLFLineEndings() {
+        let jsonl = "{\"timestamp\": \"2026-01-08T10:00:00.000Z\", \"type\": \"user\"}\r\n{\"timestamp\": \"2026-01-08T10:00:05.000Z\", \"type\": \"assistant\"}\r\n"
+        XCTAssertEqual(JSONLUsageParser.parseEntries(from: Data(jsonl.utf8)).count, 2)
+    }
+
+    func testParseEntriesFromASliceOfLargerData() {
+        // The scanner passes slices that do not start at index 0
+        let jsonl = "junk-without-newline\n{\"timestamp\": \"2026-01-08T10:00:00.000Z\", \"type\": \"user\"}\ntail"
+        let data = Data(jsonl.utf8)
+        let start = data.firstIndex(of: UInt8(ascii: "\n"))! + 1
+        let end = data.lastIndex(of: UInt8(ascii: "\n"))! + 1
+
+        let entries = JSONLUsageParser.parseEntries(from: data[start..<end])
+        XCTAssertEqual(entries.map(\.type), ["user"])
     }
 
     func testParseEntriesExtractsCacheTokens() {
@@ -258,6 +290,57 @@ final class JSONLUsageParserTests: XCTestCase {
         XCTAssertEqual(entries.count, lineCount, "Should parse all \(lineCount) entries")
         XCTAssertEqual(entries[0].inputTokens, 100)
         XCTAssertEqual(entries[0].outputTokens, 50)
+    }
+
+    func testRefreshAfterAnAppendCostsOnlyTheNewBytes() throws {
+        // Many logs, as in a busy ~/.claude/projects: after the first full scan, one appended line
+        // must cost one file and its new bytes, not a re-read of everything in the lookback window
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ParserPerformance-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func line(minutesAgo: Int) -> String {
+            let timestamp = isoFormatter.string(from: Date().addingTimeInterval(-Double(minutesAgo) * 60))
+            return "{\"timestamp\": \"\(timestamp)\", \"type\": \"assistant\", \"message\": {\"usage\": {\"input_tokens\": 100, \"output_tokens\": 50}}}\n"
+        }
+
+        let fileCount = 40
+        let linesPerFile = 500
+        var logs: [URL] = []
+        for fileIndex in 0..<fileCount {
+            let project = temporary.appendingPathComponent("project-\(fileIndex % 8)", isDirectory: true)
+            try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+            let log = project.appendingPathComponent("session-\(fileIndex).jsonl")
+            let text = (0..<linesPerFile).map { line(minutesAgo: (linesPerFile - $0) / 2) }.joined()
+            try Data(text.utf8).write(to: log)
+            logs.append(log)
+        }
+
+        let scanner = UsageLogScanner(rootDirectory: temporary)
+        XCTAssertNotNil(scanner.refresh(fullScan: true))
+        XCTAssertEqual(scanner.entries.count, fileCount * linesPerFile)
+
+        let appended = line(minutesAgo: 0)
+        let handle = try FileHandle(forWritingTo: logs[17])
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(appended.utf8))
+        try handle.close()
+
+        let before = scanner.statistics
+        scanner.refresh()
+
+        XCTAssertEqual(scanner.statistics.filesOpened - before.filesOpened, 1)
+        XCTAssertEqual(scanner.statistics.bytesRead - before.bytesRead,
+                       appended.utf8.count + UsageLogScanner.fingerprintLength)
+        XCTAssertEqual(scanner.statistics.fullScans, before.fullScans)
+        XCTAssertEqual(scanner.entries.count, fileCount * linesPerFile + 1)
+
+        // With nothing new, a refresh opens no files at all
+        let idle = scanner.statistics
+        scanner.refresh()
+        XCTAssertEqual(scanner.statistics, idle)
     }
 
     // MARK: - Usage Window Struct Tests
