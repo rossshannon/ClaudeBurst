@@ -332,8 +332,9 @@ final class JSONLUsageParserTests: XCTestCase {
         scanner.refresh()
 
         XCTAssertEqual(scanner.statistics.filesOpened - before.filesOpened, 1)
+        // The new line, plus the two short fingerprint reads that check the file was not rewritten
         XCTAssertEqual(scanner.statistics.bytesRead - before.bytesRead,
-                       appended.utf8.count + UsageLogScanner.fingerprintLength)
+                       appended.utf8.count + 2 * UsageLogScanner.fingerprintLength)
         XCTAssertEqual(scanner.statistics.fullScans, before.fullScans)
         XCTAssertEqual(scanner.entries.count, fileCount * linesPerFile + 1)
 

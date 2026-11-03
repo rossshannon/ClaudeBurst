@@ -5,7 +5,7 @@ import Foundation
 // (MIT License)
 
 /// Represents the start and end of a Claude Code usage window
-public struct UsageWindow: Equatable {
+public struct UsageWindow: Equatable, Sendable {
     public let start: Date
     public let end: Date
 
