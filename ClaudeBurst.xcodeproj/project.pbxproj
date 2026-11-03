@@ -16,6 +16,10 @@
 		A10000012233445500F8 /* SessionFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500F9 /* SessionFormatterTests.swift */; };
 		A10000012233445500E3 /* JSONLUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500D0 /* JSONLUsageParser.swift */; };
 		A10000012233445500F6 /* SessionFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012233445500F7 /* SessionFormatter.swift */; };
+		A1000001223344550101 /* UsageLogScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550100 /* UsageLogScanner.swift */; };
+		A1000001223344550103 /* UsageMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550102 /* UsageMonitor.swift */; };
+		A1000001223344550105 /* UsageLogScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550104 /* UsageLogScannerTests.swift */; };
+		A1000001223344550107 /* UsageMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001223344550106 /* UsageMonitorTests.swift */; };
 		A10000012233445500EB /* ClaudeBurstCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000012233445500E7 /* ClaudeBurstCore.framework */; };
 		A10000012233445500EC /* ClaudeBurstCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000012233445500E7 /* ClaudeBurstCore.framework */; };
 		A10000012233445500F0 /* ClaudeBurstCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000012233445500E7 /* ClaudeBurstCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -56,6 +60,10 @@
 		A1000001223344550021 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		A10000012233445500D0 /* JSONLUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONLUsageParser.swift; sourceTree = "<group>"; };
 		A10000012233445500F7 /* SessionFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionFormatter.swift; sourceTree = "<group>"; };
+		A1000001223344550100 /* UsageLogScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageLogScanner.swift; sourceTree = "<group>"; };
+		A1000001223344550102 /* UsageMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageMonitor.swift; sourceTree = "<group>"; };
+		A1000001223344550104 /* UsageLogScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageLogScannerTests.swift; sourceTree = "<group>"; };
+		A1000001223344550106 /* UsageMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageMonitorTests.swift; sourceTree = "<group>"; };
 		A10000012233445500D2 /* JSONLUsageParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONLUsageParserTests.swift; sourceTree = "<group>"; };
 		A10000012233445500F9 /* SessionFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionFormatterTests.swift; sourceTree = "<group>"; };
 		A10000012233445500D4 /* ClaudeBurstTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeBurstTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -115,6 +123,8 @@
 			children = (
 				A10000012233445500D0 /* JSONLUsageParser.swift */,
 				A10000012233445500F7 /* SessionFormatter.swift */,
+				A1000001223344550100 /* UsageLogScanner.swift */,
+				A1000001223344550102 /* UsageMonitor.swift */,
 			);
 			path = ClaudeBurstCore;
 			sourceTree = "<group>";
@@ -124,6 +134,8 @@
 			children = (
 				A10000012233445500D2 /* JSONLUsageParserTests.swift */,
 				A10000012233445500F9 /* SessionFormatterTests.swift */,
+				A1000001223344550104 /* UsageLogScannerTests.swift */,
+				A1000001223344550106 /* UsageMonitorTests.swift */,
 			);
 			path = ClaudeBurstTests;
 			sourceTree = "<group>";
@@ -291,6 +303,8 @@
 			files = (
 				A10000012233445500D3 /* JSONLUsageParserTests.swift in Sources */,
 				A10000012233445500F8 /* SessionFormatterTests.swift in Sources */,
+				A1000001223344550105 /* UsageLogScannerTests.swift in Sources */,
+				A1000001223344550107 /* UsageMonitorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +314,8 @@
 			files = (
 				A10000012233445500E3 /* JSONLUsageParser.swift in Sources */,
 				A10000012233445500F6 /* SessionFormatter.swift in Sources */,
+				A1000001223344550101 /* UsageLogScanner.swift in Sources */,
+				A1000001223344550103 /* UsageMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

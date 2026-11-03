@@ -14,17 +14,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var soundDirectoryFileDescriptor: CInt?
     var currentSessionWindow: UsageWindow?
     var lastNotifiedPeriodEnd: Date?
-    var usageDirectoryMonitor: DispatchSourceFileSystemObject?
-    var usageDirectoryFileDescriptor: CInt?
+    var usageMonitor: UsageMonitor?
     var usagePollTimer: Timer?
-    var usageDirectoryPath: String?
     var resolvedProjectsDirectoryURL: URL?
     var hasCompletedInitialLoad = false
-
-    // Performance optimization: debouncing and concurrency control
-    // Note: These are accessed from main queue contexts (event handlers and @MainActor async functions)
-    private var debounceWorkItem: DispatchWorkItem?
-    private var isUpdateInProgress = false
 
     // Bon mots for notifications
     var bonMots: [String] = []
@@ -162,14 +155,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func startUsageMonitoring() {
-        readUsageAndUpdate(triggerIfRolledOver: false)
-        startUsageDirectoryMonitor()
+        startUsageMonitorIfPossible()
         startUsagePolling()
     }
 
     func stopUsageMonitoring() {
-        stopUsageDirectoryMonitor()
+        usageMonitor?.stop()
+        usageMonitor = nil
         stopUsagePolling()
+    }
+
+    /// The monitor scans the projects directory once, then follows file events; until Claude Code
+    /// has created the directory, each poll tries again
+    func startUsageMonitorIfPossible() {
+        guard usageMonitor == nil else { return }
+
+        guard let directoryURL = resolveProjectsDirectoryURL() else {
+            hasCompletedInitialLoad = true
+            return
+        }
+
+        let monitor = UsageMonitor(rootDirectory: directoryURL) { [weak self] window in
+            self?.updateUsageWindow(window)
+        }
+        usageMonitor = monitor
+        monitor.start()
     }
 
     func startSessionTimer() {
@@ -182,7 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func checkSessionRollover() {
         guard let window = currentSessionWindow else {
-            readUsageAndUpdate(triggerIfRolledOver: false)
+            readUsageAndUpdate()
             return
         }
 
@@ -195,41 +205,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 triggerSessionNotification(subtitle: estimatedWindow)
             }
             // Also check for new activity
-            readUsageAndUpdate(triggerIfRolledOver: false)
+            readUsageAndUpdate()
         }
     }
 
-    func readUsageAndUpdate(triggerIfRolledOver: Bool) {
-        Task {
-            await readUsageAndUpdateAsync(triggerIfRolledOver: triggerIfRolledOver)
+    /// Ask for a refresh; the result arrives in updateUsageWindow(_:)
+    func readUsageAndUpdate() {
+        guard let monitor = usageMonitor else {
+            startUsageMonitorIfPossible()
+            return
         }
+        monitor.refresh()
     }
 
-    @MainActor
-    private func readUsageAndUpdateAsync(triggerIfRolledOver: Bool) async {
-        // Prevent concurrent scans - skip if update already in progress
-        guard !isUpdateInProgress else { return }
-
-        isUpdateInProgress = true
-        defer { isUpdateInProgress = false }
-
-        let window = await JSONLUsageParser.loadCurrentWindowAsync()
-
+    func updateUsageWindow(_ window: UsageWindow?) {
         let previousEnd = currentSessionWindow?.end
         currentSessionWindow = window
         hasCompletedInitialLoad = true
 
         guard let window = window, let previousEnd = previousEnd else { return }
 
-        if window.end > previousEnd {
-            let shouldNotify = triggerIfRolledOver || Date() >= previousEnd
-            if shouldNotify && lastNotifiedPeriodEnd != previousEnd {
-                lastNotifiedPeriodEnd = previousEnd
-                triggerSessionNotification(subtitle: SessionFormatter.formatSessionRange(start: window.start, end: window.end))
-            }
+        // A later window only means a new session once the previous one has ended. File events
+        // refresh all the time, and a window can also move when old logs leave the lookback window.
+        if window.end > previousEnd && Date() >= previousEnd && lastNotifiedPeriodEnd != previousEnd {
+            lastNotifiedPeriodEnd = previousEnd
+            triggerSessionNotification(subtitle: SessionFormatter.formatSessionRange(start: window.start, end: window.end))
         }
-
-        refreshUsageDirectoryMonitor()
     }
 
     func resolveProjectsDirectoryURL() -> URL? {
@@ -247,78 +248,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return nil
     }
 
-    func startUsageDirectoryMonitor() {
-        guard usageDirectoryMonitor == nil else { return }
-
-        guard let directoryURL = resolveProjectsDirectoryURL() else { return }
-        let descriptor = open(directoryURL.path, O_EVTONLY)
-        guard descriptor != -1 else { return }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: descriptor,
-            eventMask: [.write, .rename, .delete],
-            queue: .main
-        )
-
-        source.setEventHandler { [weak self] in
-            // Debounce rapid file system events to prevent CPU storms
-            // Cancel any pending update
-            self?.debounceWorkItem?.cancel()
-
-            // Schedule new update with 500ms delay
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.readUsageAndUpdate(triggerIfRolledOver: true)
-            }
-            self?.debounceWorkItem = workItem
-
-            // Execute after 500ms delay to coalesce rapid events
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
-        }
-
-        source.setCancelHandler {
-            close(descriptor)
-        }
-
-        usageDirectoryFileDescriptor = descriptor
-        usageDirectoryPath = directoryURL.path
-        usageDirectoryMonitor = source
-        source.resume()
-    }
-
-    func refreshUsageDirectoryMonitor() {
-        guard let directoryURL = resolveProjectsDirectoryURL() else {
-            stopUsageDirectoryMonitor()
-            return
-        }
-
-        if usageDirectoryMonitor == nil {
-            startUsageDirectoryMonitor()
-            return
-        }
-
-        if usageDirectoryPath != directoryURL.path {
-            restartUsageDirectoryMonitor()
-        }
-    }
-
-    func restartUsageDirectoryMonitor() {
-        stopUsageDirectoryMonitor()
-        startUsageDirectoryMonitor()
-    }
-
-    func stopUsageDirectoryMonitor() {
-        debounceWorkItem?.cancel()
-        debounceWorkItem = nil
-        usageDirectoryMonitor?.cancel()
-        usageDirectoryMonitor = nil
-        usageDirectoryFileDescriptor = nil
-        usageDirectoryPath = nil
-    }
-
     func startUsagePolling() {
         usagePollTimer?.invalidate()
+        // A cheap safety net: file events drive most refreshes, and this one checks tracked files
+        // with stat and lets old logs leave the lookback window
         usagePollTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            self?.readUsageAndUpdate(triggerIfRolledOver: false)
+            self?.readUsageAndUpdate()
         }
         usagePollTimer?.tolerance = 10
     }

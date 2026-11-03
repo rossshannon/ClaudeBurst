@@ -69,66 +69,76 @@ public enum JSONLUsageParser {
     }()
 
     /// Parse all entries from a JSONL file's data
-    /// Uses line-by-line streaming to minimize memory allocations
+    /// Splits on newline bytes and parses each line in place, so a file is never copied into a String
+    /// and one bad line (invalid JSON or invalid UTF-8) skips only that line
     public static func parseEntries(from data: Data) -> [JSONLUsageEntry] {
-        guard let content = String(data: data, encoding: .utf8) else { return [] }
-
         var entries: [JSONLUsageEntry] = []
+        var lineStart = data.startIndex
 
-        // Stream processing: enumerate lines without creating intermediate array
-        content.enumerateLines { line, _ in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { return }
-
-            guard let lineData = trimmed.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
-                return
+        while lineStart < data.endIndex {
+            let lineEnd = data[lineStart...].firstIndex(of: newline) ?? data.endIndex
+            if lineEnd > lineStart, let entry = parseEntry(fromLine: data[lineStart..<lineEnd]) {
+                entries.append(entry)
             }
-
-            guard let timestampString = json["timestamp"] as? String,
-                  let timestamp = dateFormatter.date(from: timestampString)
-                    ?? fallbackDateFormatter.date(from: timestampString) else {
-                return
-            }
-
-            let type = json["type"] as? String ?? ""
-
-            // Extract token usage from message.usage
-            var inputTokens = 0
-            var outputTokens = 0
-            var cacheCreationTokens = 0
-            var cacheReadTokens = 0
-
-            if let message = json["message"] as? [String: Any],
-               let usage = message["usage"] as? [String: Any] {
-                inputTokens = usage["input_tokens"] as? Int ?? 0
-                outputTokens = usage["output_tokens"] as? Int ?? 0
-                cacheCreationTokens = usage["cache_creation_input_tokens"] as? Int ?? 0
-                cacheReadTokens = usage["cache_read_input_tokens"] as? Int ?? 0
-            }
-
-            entries.append(JSONLUsageEntry(
-                timestamp: timestamp,
-                type: type,
-                inputTokens: inputTokens,
-                outputTokens: outputTokens,
-                cacheCreationTokens: cacheCreationTokens,
-                cacheReadTokens: cacheReadTokens
-            ))
+            lineStart = lineEnd < data.endIndex ? data.index(after: lineEnd) : data.endIndex
         }
 
         return entries
+    }
+
+    /// The byte that ends each line of a JSONL file
+    static let newline = UInt8(ascii: "\n")
+
+    /// Parse one line of a JSONL file; returns nil for blank, invalid, or timestamp-less lines
+    private static func parseEntry(fromLine line: Data) -> JSONLUsageEntry? {
+        guard let json = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else {
+            return nil
+        }
+
+        guard let timestampString = json["timestamp"] as? String,
+              let timestamp = dateFormatter.date(from: timestampString)
+                ?? fallbackDateFormatter.date(from: timestampString) else {
+            return nil
+        }
+
+        let type = json["type"] as? String ?? ""
+
+        // Extract token usage from message.usage
+        var inputTokens = 0
+        var outputTokens = 0
+        var cacheCreationTokens = 0
+        var cacheReadTokens = 0
+
+        if let message = json["message"] as? [String: Any],
+           let usage = message["usage"] as? [String: Any] {
+            inputTokens = usage["input_tokens"] as? Int ?? 0
+            outputTokens = usage["output_tokens"] as? Int ?? 0
+            cacheCreationTokens = usage["cache_creation_input_tokens"] as? Int ?? 0
+            cacheReadTokens = usage["cache_read_input_tokens"] as? Int ?? 0
+        }
+
+        return JSONLUsageEntry(
+            timestamp: timestamp,
+            type: type,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheCreationTokens: cacheCreationTokens,
+            cacheReadTokens: cacheReadTokens
+        )
     }
 
     /// Calculate the current usage window from parsed entries
     /// Uses block-based logic: creates new 5-hour blocks when clock expires OR after gaps
     /// Returns the block that contains "now", or the most recent past block if none active
     public static func calculateCurrentWindow(entries: [JSONLUsageEntry]) -> UsageWindow? {
-        guard !entries.isEmpty else { return nil }
-
         // Sort by timestamp chronologically
-        let sorted = entries.sorted { $0.timestamp < $1.timestamp }
-        let now = Date()
+        calculateCurrentWindow(sortedTimestamps: entries.map(\.timestamp).sorted(), now: Date())
+    }
+
+    /// The same calculation over timestamps already in ascending order, so a caller that keeps
+    /// them sorted does not pay for sorting on every refresh
+    static func calculateCurrentWindow(sortedTimestamps sorted: [Date], now: Date) -> UsageWindow? {
+        guard !sorted.isEmpty else { return nil }
 
         // Build session blocks by iterating chronologically
         // A new block starts when:
@@ -140,17 +150,17 @@ public enum JSONLUsageParser {
         var currentBlockEnd: Date? = nil
         var lastEntryTimestamp: Date? = nil
 
-        for entry in sorted {
+        for timestamp in sorted {
             let needsNewBlock: Bool
 
             if currentBlockStart == nil {
                 // First entry - start a new block
                 needsNewBlock = true
-            } else if let blockEnd = currentBlockEnd, entry.timestamp >= blockEnd {
+            } else if let blockEnd = currentBlockEnd, timestamp >= blockEnd {
                 // Current block's time has expired - start a new block
                 needsNewBlock = true
             } else if let lastEntry = lastEntryTimestamp,
-                      entry.timestamp.timeIntervalSince(lastEntry) >= sessionDuration {
+                      timestamp.timeIntervalSince(lastEntry) >= sessionDuration {
                 // Gap >= 5 hours since last entry - start a new block
                 needsNewBlock = true
             } else {
@@ -164,12 +174,12 @@ public enum JSONLUsageParser {
                 }
 
                 // Start a new block - truncate to hour in UTC (matches Claude Code)
-                let blockStart = truncateToHourUTC(entry.timestamp)
+                let blockStart = truncateToHourUTC(timestamp)
                 currentBlockStart = blockStart
                 currentBlockEnd = blockStart.addingTimeInterval(sessionDuration)
             }
 
-            lastEntryTimestamp = entry.timestamp
+            lastEntryTimestamp = timestamp
         }
 
         // Add the final block
@@ -237,33 +247,5 @@ public enum JSONLUsageParser {
         }
 
         return nil
-    }
-
-    /// Convenience method to load the current window from the default projects directory (synchronous)
-    public static func loadCurrentWindow() -> UsageWindow? {
-        guard let projectsDir = projectsDirectoryURL() else { return nil }
-
-        let lookbackDate = Date().addingTimeInterval(-lookbackDuration)
-        let jsonlFiles = findJSONLFiles(in: projectsDir, since: lookbackDate)
-
-        var allEntries: [JSONLUsageEntry] = []
-
-        for fileURL in jsonlFiles {
-            if let data = try? Data(contentsOf: fileURL) {
-                allEntries.append(contentsOf: parseEntries(from: data))
-            }
-        }
-
-        return calculateCurrentWindow(entries: allEntries)
-    }
-
-    /// Async version that performs file I/O off the main thread
-    public static func loadCurrentWindowAsync() async -> UsageWindow? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = loadCurrentWindow()
-                continuation.resume(returning: result)
-            }
-        }
     }
 }
